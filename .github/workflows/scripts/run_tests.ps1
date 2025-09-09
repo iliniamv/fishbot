@@ -1,6 +1,7 @@
-# Smoke test: simple "import main" in PowerShell
-$python = (Get-Command python -ErrorAction SilentlyContinue)?.Source
-if (-not $python) { Write-Error "Python not found in PATH"; exit 1 }
+# Smoke test: simple "import main" for Windows PowerShell 5.1
+$cmd = Get-Command python -ErrorAction SilentlyContinue
+if (-not $cmd) { Write-Error "Python not found in PATH"; exit 1 }
+$python = $cmd.Source
 
 $code = @"
 try:
