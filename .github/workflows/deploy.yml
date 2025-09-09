@@ -1,0 +1,52 @@
+
+name: Deploy FishBot (self-hosted)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    # Requires a runner installed on your server
+    runs-on: [self-hosted, windows]
+    defaults:
+      run:
+        shell: pwsh
+
+    env:
+      FISHBOT_PROJECT_DIR: ${{ secrets.FISHBOT_PROJECT_DIR }}
+      FISHBOT_SERVICE_NAME: ${{ secrets.FISHBOT_SERVICE_NAME }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show runner info
+        run: |
+          $PSVersionTable
+          whoami
+          Write-Host "PROJECT_DIR=$env:FISHBOT_PROJECT_DIR, SERVICE=$env:FISHBOT_SERVICE_NAME"
+
+      - name: Ensure Python
+        run: |
+          if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+            Write-Error "Python is required on the runner (add to PATH)."
+          }
+
+      - name: Install deps (if requirements.txt)
+        run: |
+          if (Test-Path requirements.txt) {
+            python -m pip install --upgrade pip
+            python -m pip install -r requirements.txt
+          } else {
+            Write-Host "requirements.txt not found, skipping pip install."
+          }
+
+      - name: Smoke tests
+        run: ./scripts/run_tests.ps1
+
+      - name: Deploy + Restart service
+        run: ./scripts/deploy.ps1
