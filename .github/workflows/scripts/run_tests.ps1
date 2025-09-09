@@ -1,22 +1,22 @@
-# Smoke test for Windows PowerShell 5.1: just "import main"
+# Smoke test for Windows PowerShell 5.1 — import main from repo root
 
 $cmd = Get-Command python -ErrorAction SilentlyContinue
 if (-not $cmd) { Write-Error "Python not found in PATH"; exit 1 }
 $python = $cmd.Source
 
-$py = @'
+# Текущая папка шага — корень репозитория
+$repo = (Get-Location).Path
+
+$code = @"
+import sys, os
+sys.path.insert(0, r"$repo")
 try:
-    import importlib
-    import main  # simple import smoke
+    import main  # must be in repo root
     print("OK: imported main")
 except Exception as e:
     print("FAIL: exception importing main:", e)
     raise
-'@
+"@
 
-$temp = [System.IO.Path]::Combine($env:TEMP, "smoke_test_main.py")
-$py | Out-File -FilePath $temp -Encoding ASCII -Force
-
-$proc = Start-Process -FilePath $python -ArgumentList $temp -NoNewWindow -Wait -PassThru
-Remove-Item $temp -ErrorAction SilentlyContinue
+$proc = Start-Process -FilePath $python -ArgumentList @("-c", $code) -NoNewWindow -Wait -PassThru
 exit $proc.ExitCode
