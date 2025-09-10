@@ -1,40 +1,61 @@
-Param()
+# Deploy & (мягкий) рестарт службы для Windows PowerShell 5.1
+# - Robocopy коды 0..7 считаем успехом
+# - Ошибки управления службой НЕ валят job (warning), в конце exit 0
 
-# Requires env vars set as GitHub Secrets and exposed to job env
-$projectDir = $env:FISHBOT_PROJECT_DIR
-$service    = $env:FISHBOT_SERVICE_NAME
+$ErrorActionPreference = 'Continue'
 
-if (-not $projectDir) { Write-Error "FISHBOT_PROJECT_DIR is empty"; exit 1 }
-if (-not $service)    { Write-Error "FISHBOT_SERVICE_NAME is empty"; exit 1 }
+$proj    = $env:FISHBOT_PROJECT_DIR
+$service = $env:FISHBOT_SERVICE_NAME
+if (-not $proj)    { Write-Error "FISHBOT_PROJECT_DIR is empty"; exit 1 }
+if (-not $service) { Write-Error "FISHBOT_SERVICE_NAME is empty"; exit 1 }
 
-Write-Host "Deploying to $projectDir, service $service"
+Write-Host "Deploying to $proj, service $service"
 
-# Ensure target dir exists
-if (!(Test-Path $projectDir)) {
-  New-Item -ItemType Directory -Force -Path $projectDir | Out-Null
+# Гарантируем каталог назначения
+if (-not (Test-Path $proj)) { New-Item -ItemType Directory -Force -Path $proj | Out-Null }
+
+# Путь исходников = корень чекаута
+$src = (Get-Location).Path
+
+# Останавливаем службу (если есть)
+try {
+    $svc = Get-Service -Name $service -ErrorAction Stop
+    if ($svc.Status -ne 'Stopped') {
+        Write-Host "Stopping service $service..."
+        Stop-Service -Name $service -Force -ErrorAction Stop
+        Start-Sleep -Seconds 2
+    }
+} catch {
+    Write-Warning "Could not stop service $service (it may not be running). $_"
 }
 
-# Stop service if exists (ignore errors)
-try {
-  Stop-Service -Name $service -ErrorAction Stop
-  Write-Host "Stopped service $service"
-} catch {
-  Write-Warning "Could not stop service $service (it may not be running)."
+# Копируем файлы
+$opts = @(
+    '/MIR','/FFT','/R:2','/W:2','/NP','/NFL','/NDL','/NJH','/NJS',
+    '/XD','.git','.github','__pycache__','.venv','.pytest_cache','logs'
+)
+& robocopy $src $proj *.* $opts
+$rc = $LASTEXITCODE
+Write-Host "Robocopy exit code: $rc"
+
+# Robocopy: 0..7 = SUCCESS
+if ($rc -gt 7) {
+    Write-Error "Robocopy failed with code $rc"
+    exit 1
 }
 
-# Mirror workspace to project dir, excluding dev folders
-$src = (Resolve-Path "$PSScriptRoot\..").Path  # repo root
-$rc = & robocopy $src $projectDir /MIR /NFL /NDL /NJH /NJS /NP /XD ".git" ".github" "venv" "__pycache__" ".pytest_cache" "logs"
-$ec = $LASTEXITCODE
-Write-Host "Robocopy exit code: $ec"
-
-# Start service (or try to create via sc if it's missing)
+# Запускаем службу (мягко)
 try {
-  Start-Service -Name $service -ErrorAction Stop
-  Write-Host "Started service $service"
+    Write-Host "Starting service $service..."
+    Start-Service -Name $service -ErrorAction Stop
 } catch {
-  Write-Warning "Start-Service failed. Trying 'sc start'..."
-  sc.exe start $service | Out-Null
+    Write-Warning "Start-Service failed. Trying 'sc start'..."
+    try {
+        & sc.exe start $service | Out-Null
+    } catch {
+        Write-Warning "Service $service not found or could not be started."
+    }
 }
 
 Write-Host "Deploy finished."
+exit 0
