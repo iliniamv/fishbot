@@ -9,7 +9,6 @@ on:
 
 jobs:
   deploy:
-    # Requires a runner installed on your server
     runs-on: [self-hosted, Windows, X64]
     defaults:
       run:
@@ -46,16 +45,10 @@ jobs:
 
       - name: Smoke tests
         run: |
-          $p1 = ".\scripts\run_tests.ps1"
-          $p2 = ".\.github\workflows\scripts\run_tests.ps1"
-          $script = if (Test-Path $p1) { $p1 } elseif (Test-Path $p2) { $p2 } else { throw "run_tests.ps1 not found" }
           Set-ExecutionPolicy Bypass -Scope Process
-          & $script
+          .\scripts\run_tests.ps1
 
       - name: Deploy + Restart service
         run: |
-          $p1 = ".\scripts\deploy.ps1"
-          $p2 = ".\.github\workflows\scripts\deploy.ps1"
-          $script = if (Test-Path $p1) { $p1 } elseif (Test-Path $p2) { $p2 } else { throw "deploy.ps1 not found" }
           Set-ExecutionPolicy Bypass -Scope Process
-          & $script
+          .\scripts\deploy.ps1
