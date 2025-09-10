@@ -49,12 +49,24 @@ jobs:
           $cmd = Get-Command python -ErrorAction SilentlyContinue
           if (-not $cmd) { Write-Error 'Python not found in PATH'; exit 1 }
           $python = $cmd.Source
+
           $repo = (Get-Location).Path
-          # Запускаем python с рабочей директорией = корень репо,
-          # чтобы import main нашёл файл main.py
-          $code = "import sys; sys.path.insert(0, r'$repo'); import main; print('OK: imported main')"
-          $proc = Start-Process -FilePath $python -ArgumentList @('-c', $code) -WorkingDirectory $repo -NoNewWindow -Wait -PassThru
-          if ($proc.ExitCode -ne 0) { exit $proc.ExitCode }
+          $temp = Join-Path $env:TEMP 'smoke_test_main.py'
+          Remove-Item $temp -ErrorAction SilentlyContinue
+
+          Add-Content -Path $temp -Value 'import sys, pathlib'
+          Add-Content -Path $temp -Value ('repo = r"'+$repo+'"')
+          Add-Content -Path $temp -Value 'sys.path.insert(0, repo)'
+          Add-Content -Path $temp -Value 'p = pathlib.Path(repo)/"main.py"'
+          Add-Content -Path $temp -Value 'if not p.exists():'
+          Add-Content -Path $temp -Value '    raise FileNotFoundError("main.py not found at %s" % p)'
+          Add-Content -Path $temp -Value 'import main'
+          Add-Content -Path $temp -Value 'print("OK: imported main")'
+
+          $proc = Start-Process -FilePath $python -WorkingDirectory $repo -ArgumentList @('-u', $temp) -NoNewWindow -Wait -PassThru
+          Remove-Item $temp -ErrorAction SilentlyContinue
+          exit $proc.ExitCode
+
 
       - name: Deploy + soft restart service
         run: |
